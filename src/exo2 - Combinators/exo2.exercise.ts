@@ -4,7 +4,10 @@
 import { Either } from 'fp-ts/Either';
 import { Option } from 'fp-ts/Option';
 import { Failure } from '../Failure';
-import { unimplemented } from '../utils';
+import { flow, pipe } from 'fp-ts/function';
+import * as O from "fp-ts/Option";
+import * as E from "fp-ts/Either";
+import * as RA from "fp-ts/ReadonlyArray"
 
 ///////////////////////////////////////////////////////////////////////////////
 //                                   SETUP                                   //
@@ -117,17 +120,50 @@ export const invalidAttackerFailure = Failure.builder(
 // common operations done with the `Either` type and it is available through
 // the `flatMap` operator.
 
-export const checkAttackerAndSmash: (
-  attacker: Option<Character>,
-) => Either<NoAttackerFailure | InvalidAttackerFailure, Damage> = unimplemented;
+type CheckSelected = (character: Option<Character>) => Either<NoAttackerFailure, Character>
+const checkSelected: CheckSelected = E.fromOption(() => noAttackerFailure('No attacker currently selected'))
 
-export const checkAttackerAndBurn: (
-  attacker: Option<Character>,
-) => Either<NoAttackerFailure | InvalidAttackerFailure, Damage> = unimplemented;
+type CheckWarrior = (character: Character) => Either<InvalidAttackerFailure, Warrior>
+const checkWarrior: CheckWarrior = E.fromPredicate(
+  isWarrior,
+  (character) => invalidAttackerFailure(`${character.toString()} cannot perform smash`)
+)
 
-export const checkAttackerAndShoot: (
-  attacker: Option<Character>,
-) => Either<NoAttackerFailure | InvalidAttackerFailure, Damage> = unimplemented;
+type CheckAttackerAndSmash = (attacker: Option<Character>) => Either<NoAttackerFailure | InvalidAttackerFailure, Damage>
+export const checkAttackerAndSmash: CheckAttackerAndSmash = attacker => pipe(
+  attacker,
+  checkSelected,
+  E.flatMap(checkWarrior),
+  E.map(warrior => warrior.smash())
+)
+
+type CheckWizard = (character: Character) => Either<InvalidAttackerFailure, Wizard>
+const checkWizard: CheckWizard = E.fromPredicate(
+  isWizard,
+  character => invalidAttackerFailure(`${character.toString()} cannot perform burn`)
+)
+
+type CheckAttackerAndBurn = (attacker: Option<Character>) => Either<NoAttackerFailure | InvalidAttackerFailure, Damage>
+export const checkAttackerAndBurn: CheckAttackerAndBurn = attacker => pipe(
+  attacker,
+  checkSelected,
+  E.flatMap(checkWizard),
+  E.map(wizard => wizard.burn())
+)
+
+type CheckArcher = (character: Character) => Either<InvalidAttackerFailure, Archer>
+const checkArcher: CheckArcher = E.fromPredicate(
+  isArcher,
+  character => invalidAttackerFailure(`${character.toString()} cannot perform shoot`)
+)
+
+type CheckAttackerAndShoot = (attacker: Option<Character>,) => Either<NoAttackerFailure | InvalidAttackerFailure, Damage>
+export const checkAttackerAndShoot: CheckAttackerAndShoot = attacker => pipe(
+  attacker,
+  checkSelected,
+  E.flatMap(checkArcher),
+  E.map(archer => archer.shoot())
+)
 
 ///////////////////////////////////////////////////////////////////////////////
 //                                  OPTION                                   //
@@ -147,13 +183,22 @@ export const checkAttackerAndShoot: (
 // section, they should be easily reused for those use-cases.
 
 export const smashOption: (character: Character) => Option<Damage> =
-  unimplemented;
+  flow(
+    O.fromPredicate(isWarrior),
+    O.map(warrior => warrior.smash())
+  )
 
 export const burnOption: (character: Character) => Option<Damage> =
-  unimplemented;
+  flow(
+    O.fromPredicate(isWizard),
+    O.map(wizard => wizard.burn())
+  );
 
 export const shootOption: (character: Character) => Option<Damage> =
-  unimplemented;
+  flow(
+    O.fromPredicate(isArcher),
+    O.map(archer => archer.shoot())
+  );
 
 ///////////////////////////////////////////////////////////////////////////////
 //                                   ARRAY                                   //
@@ -174,5 +219,21 @@ export interface TotalDamage {
   [Damage.Ranged]: number;
 }
 
-export const attack: (army: ReadonlyArray<Character>) => TotalDamage =
-  unimplemented;
+export const attack: (army: ReadonlyArray<Character>) => TotalDamage = army =>
+  ({
+    [Damage.Physical]: pipe(
+      army,
+      RA.filterMap(smashOption),
+      RA.size
+    ),
+    [Damage.Magical]: pipe(
+      army,
+      RA.filterMap(burnOption),
+      RA.size
+    ),
+    [Damage.Ranged]: pipe(
+      army,
+      RA.filterMap(shootOption),
+      RA.size
+    )
+  });
