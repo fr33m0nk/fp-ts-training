@@ -1,10 +1,11 @@
 // `fp-ts` training Exercise 6
 // Introduction to `ReaderTaskEither`
 
+import { readerTaskEither as rte } from 'fp-ts';
 import { ReaderTaskEither } from 'fp-ts/lib/ReaderTaskEither';
-import { unimplemented } from '../utils';
 import { Application } from './application';
 import { User } from './domain';
+import { pipe } from 'fp-ts/function';
 
 // In real world applications you will mostly manipulate `ReaderTaskEither` aka
 // `rte` in the use-cases of the application.
@@ -23,13 +24,21 @@ import { User } from './domain';
 // current context. In the following example, we need to fetch a user by its id,
 // and then we want to return its name capitalized.
 
+const capitalize = (str: string) =>
+  `${str.charAt(0).toUpperCase()}${str.slice(1)}`;
+
 export const getCapitalizedUserName: (args: {
   userId: string;
 }) => ReaderTaskEither<
   User.Repository.Access,
   User.Repository.UserNotFoundError,
   string
-> = unimplemented;
+> = ({userId}) => pipe (
+  userId,
+  User.Repository.getById,
+  rte.map(x => capitalize(x.name))
+)
+
 
 // Sometimes you will need to get multiple data points before performing an operation
 // on them. In this case, it is very convenient to use the `Do` notation.
@@ -52,7 +61,18 @@ export const getConcatenationOfTheTwoUserNames: (args: {
   User.Repository.Access,
   User.Repository.UserNotFoundError,
   string
-> = unimplemented;
+> = ({ userIdOne, userIdTwo }) => pipe(
+  rte.Do,
+  rte.apS(
+    'userOneCapitalizedName',
+    getCapitalizedUserName({ userId: userIdOne }),
+  ),
+  rte.apS(
+    'userTwoCapitalizedName',
+    getCapitalizedUserName({ userId: userIdTwo }),
+  ),
+  rte.map( ({ userOneCapitalizedName, userTwoCapitalizedName }) => userOneCapitalizedName.concat(userTwoCapitalizedName))
+)
 
 // There is an alternative way of writing the previous function without the
 // Do notation. It consists of "lifting" the concatenation function in a rte
@@ -64,6 +84,8 @@ export const getConcatenationOfTheTwoUserNames: (args: {
 // Write another version of getConcatenationOfTheTwoUserNames function
 // using `rte.ap()`:
 
+const concatCurried: (x: string) => (y: string) => string = x => y => x.concat(y)
+
 export const getConcatenationOfTheTwoUserNamesUsingAp: (args: {
   userIdOne: string;
   userIdTwo: string;
@@ -71,7 +93,14 @@ export const getConcatenationOfTheTwoUserNamesUsingAp: (args: {
   User.Repository.Access,
   User.Repository.UserNotFoundError,
   string
-> = unimplemented;
+> = ({
+  userIdOne,
+  userIdTwo
+}) => pipe(
+  rte.of(concatCurried),
+  rte.ap(getCapitalizedUserName({ userId: userIdOne })),
+  rte.ap(getCapitalizedUserName({ userId: userIdTwo })),
+)
 
 // Sometimes, you will need to feed the current context with data that you can
 // only retrieve after performing some operations, in other words, operations
@@ -88,7 +117,17 @@ export const getConcatenationOfTheBestFriendNameAndUserName: (args: {
   User.Repository.Access,
   User.Repository.UserNotFoundError,
   string
-> = unimplemented;
+> = ({ userIdOne }) => pipe(
+  rte.Do,
+  rte.apS('userOne', User.Repository.getById(userIdOne)),
+  rte.bind('userTwo', ({ userOne }) =>
+    User.Repository.getById(userOne.bestFriendId)
+  ),
+  rte.map(
+    ({ userOne, userTwo }) =>
+      `${capitalize(userOne.name)}${capitalize(userTwo.name)}`
+  )
+)
 
 // Most of the time, you will need to use several external services.
 // The challenge of this use-case is to use TimeService in the flow of our `rte`
@@ -100,4 +139,12 @@ export const getConcatenationOfUserNameAndCurrentYear: (args: {
   Dependencies,
   User.Repository.UserNotFoundError,
   string
-> = unimplemented;
+> = ({
+  userIdOne
+}) => pipe(
+  rte.Do,
+  rte.apS('user', User.Repository.getById(userIdOne)),
+  rte.apSW('year', rte.fromReader(Application.TimeService.thisYear())),
+  rte.map(({ user, year }) => `${user.name}${year}`)
+
+)
