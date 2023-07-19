@@ -3,7 +3,8 @@
 
 import { Either } from 'fp-ts/Either';
 import { ReaderTaskEither } from 'fp-ts/ReaderTaskEither';
-import { unimplemented } from '../utils';
+import { readerTaskEither as rte } from 'fp-ts';
+import { Reader } from 'fp-ts/Reader';
 
 // Technically, a combinator is a pure function with no free variables in it,
 // i.e. one that does not depend on any variable from its enclosing scope.
@@ -66,10 +67,6 @@ import { unimplemented } from '../utils';
 // Well there you have it, `bindEitherK` is nothing more than
 // `rte.bind(name, a => rte.fromEither(f(a)))`
 
-const unimplementedBindCombinator = (_name: any, _f: (...props: any) => any) =>
-  unimplemented;
-const unimplementedApSCombinator = (_name: any, _thing: any) => unimplemented;
-
 export const bindEitherK: <N extends string, A, E, B>(
   name: Exclude<N, keyof A>,
   f: (a: A) => Either<E, B>,
@@ -79,12 +76,21 @@ export const bindEitherK: <N extends string, A, E, B>(
   R,
   E,
   { readonly [K in N | keyof A]: K extends keyof A ? A[K] : B }
-> = unimplemented;
+> = (name, f) => rte.bind(name, a => rte.fromEither(f(a)))
 
 // Write the implementation and type definition of `bindEitherKW`, the
 // "Widened" version of `bindEitherK`.
-
-export const bindEitherKW = unimplementedBindCombinator;
+type BindEitherKW = <N extends string, A, E2, B>(
+  name: Exclude<N, keyof A>,
+  f: (a: A) => Either<E2, B>,
+) => <R, E1>(
+  ma: ReaderTaskEither<R, E1, A>
+) => ReaderTaskEither<
+  R,
+  E1 | E2,
+  { readonly [K in N | keyof A]: K extends keyof A ? A[K] : B }
+>
+export const bindEitherKW: BindEitherKW = (name, f) => rte.bindW(name, a => rte.fromEither(f(a)))
 
 // Write the implementations and type definitions of `apSEitherK` and
 // `apSEitherKW`.
@@ -93,9 +99,29 @@ export const bindEitherKW = unimplementedBindCombinator;
 // - remember that "widen" in the case of `Either` means the union of the
 //   possible error types
 
-export const apSEitherK = unimplementedApSCombinator;
+type ApSEitherK = <N extends string, A, E, B>(
+  name: Exclude<N, keyof A>,
+  mb: Either<E, B>
+) => <R>(
+  ma: ReaderTaskEither<R, E, A>
+) => ReaderTaskEither<
+  R,
+  E,
+  { readonly [K in N | keyof A]: K extends keyof A ? A[K] : B }
+>
+export const apSEitherK: ApSEitherK = (name, mb) => rte.apS(name, rte.fromEither(mb))
 
-export const apSEitherKW = unimplementedApSCombinator;
+type ApSEitherKW =  <N extends string, A, E1, B>(
+  name: Exclude<N, keyof A>,
+  mb: Either<E1, B>
+) => <R, E2>(
+  ma: ReaderTaskEither<R, E2, A>
+) => ReaderTaskEither<
+  R,
+  E1 | E2,
+  { readonly [K in N | keyof A]: K extends keyof A ? A[K] : B }
+ >
+export const apSEitherKW: ApSEitherKW = (name, mb) => rte.apSW(name, rte.fromEither(mb))
 
 // Write the implementations and type definitions of `bindReaderK` and
 // `bindReaderKW`.
@@ -103,7 +129,26 @@ export const apSEitherKW = unimplementedApSCombinator;
 // HINT:
 // - remember that "widen" in the case of `Reader` means the intersection of
 //   the possible environment types
+type BindReaderK = <N extends string, A, R, B>(
+  name: Exclude<N, keyof A>,
+  f: (a: A) => Reader<R, B>
+) => <E>(
+  ma: ReaderTaskEither<R, E, A>
+) => ReaderTaskEither<
+  R,
+  E,
+  { readonly [K in N | keyof A]: K extends keyof A ? A[K] : B }
+>
+export const bindReaderK: BindReaderK = (name, f) => rte.bind(name, a => rte.fromReader(f(a)))
 
-export const bindReaderK = unimplementedBindCombinator;
-
-export const bindReaderKW = unimplementedBindCombinator;
+type BindReaderKW = <N extends string, A, R2, B>(
+  name: Exclude<N, keyof A>,
+  f: (a: A) => Reader<R2, B>
+) => <R1, E>(
+  ma: ReaderTaskEither<R1, E, A>
+) => ReaderTaskEither<
+  R1 & R2,
+  E,
+  { readonly [K in N | keyof A]: K extends keyof A ? A[K] : B }
+>
+export const bindReaderKW: BindReaderKW = (name, f) => rte.bindW(name, a => rte.rightReader(f(a)))
